@@ -1,0 +1,34 @@
+--- a/ios/tunnel/tunnel_api.go
++++ b/ios/tunnel/tunnel_api.go
+@@ -10,6 +10,7 @@
+ 	"net/http"
+ 	"os"
+ 	"os/exec"
++	"sort"
+ 	"strings"
+ 	"sync"
+ 	"time"
+@@ -433,6 +434,11 @@
+ 		currentUDIDs[d.Properties.SerialNumber] = true
+ 	}
+ 
++	// iphone-mcp: a phone on the cable and on Wi-Fi is listed twice; tunnel over the cable.
++	sort.SliceStable(devices.DeviceList, func(i, j int) bool {
++		return devices.DeviceList[i].Properties.ConnectionType == "USB" &&
++			devices.DeviceList[j].Properties.ConnectionType != "USB"
++	})
+ 	for _, d := range devices.DeviceList {
+ 		udid := d.Properties.SerialNumber
+ 		if m.udidFilter != "" && udid != m.udidFilter {
+@@ -491,9 +497,8 @@
+ // d on this cycle: network-connected devices can never establish a tunnel, and a
+ // device that recently failed is held off until its backoff window elapses.
+ func shouldSkipDevice(d ios.DeviceEntry, failed map[string]failedDevice, now time.Time) bool {
+-	if d.Properties.ConnectionType == "Network" {
+-		return true
+-	}
++	// iphone-mcp: Network devices are tunnelled too (lockdown over Wi-Fi starts CoreDeviceProxy just
++	// like over USB, iOS 27); the failure backoff below still keeps unreachable ones from leaking.
+ 	if f, ok := failed[d.Properties.SerialNumber]; ok && now.Sub(f.lastAttempt) < failedDeviceBackoff(f.failCount) {
+ 		return true
+ 	}
